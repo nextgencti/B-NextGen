@@ -45,3 +45,12 @@ app.get("/test-firebase", async (req, res) => {
     res.status(500).send("Firebase Error ❌ " + error.message);
   }
 });
+
+
+const axios = require('axios');
+
+setInterval(() => {
+  axios.get('https://b-nextgen.onrender.com/ping')
+    .then(() => console.log('Self-ping successful'))
+    .catch((err) => console.log('Self-ping failed:', err.message));
+}, 500); // Har 10 minute (600,000 ms) mein
