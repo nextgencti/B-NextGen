@@ -47,10 +47,7 @@ app.get("/test-firebase", async (req, res) => {
 });
 
 
-const axios = require('axios');
-
-setInterval(() => {
-  axios.get('https://b-nextgen.onrender.com/ping')
-    .then(() => console.log('Self-ping successful'))
-    .catch((err) => console.log('Self-ping failed:', err.message));
-}, 500); // Har 10 minute (600,000 ms) mein
+// Ye route Cron-job.org use karega
+app.get('/ping', (req, res) => {
+  res.status(200).send("I am alive! 🚀");
+});
