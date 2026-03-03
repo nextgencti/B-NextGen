@@ -61,9 +61,6 @@ router.post("/upload-photo", upload.single("photo"), async (req, res) => {
   }
 });
 
-module.exports = router;
-
-
 router.get("/get-student/:uid", async (req, res) => {
   try {
     const doc = await db.collection("students").doc(req.params.uid).get();
@@ -77,3 +74,5 @@ router.get("/get-student/:uid", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+module.exports = router;

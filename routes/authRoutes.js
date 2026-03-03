@@ -107,19 +107,18 @@
 // module.exports = router;
 
 //==================================GAS API==========================================
-
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const db = require("../config/firebase");
 
 const GAS_URL = process.env.GAS_URL;
-
-// In-memory store (⚠ production me Redis ya DB use karein)
-const otpStore = {};
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const OTP_EXPIRY = 5 * 60 * 1000;      // 5 min
-const RESEND_LIMIT = 60 * 1000;        // 1 min gap
+const RESEND_LIMIT = 60 * 1000;        // 1 min
 const MAX_ATTEMPTS = 5;
 
 // Generate OTP
@@ -132,8 +131,13 @@ function hashOTP(otp) {
   return crypto.createHash("sha256").update(otp).digest("hex");
 }
 
+// Generate JWT
+function generateToken(user) {
+  return jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
+}
+
 /* =========================================================
-   📧 SEND OTP (via GAS)
+   📧 SEND OTP (Firestore Based)
 ========================================================= */
 router.post("/send-otp", async (req, res) => {
   try {
@@ -143,30 +147,32 @@ router.post("/send-otp", async (req, res) => {
       return res.status(400).json({ error: "Email is required" });
     }
 
-    const existing = otpStore[email];
+    const otpRef = db.collection("otp").doc(email);
+    const existingDoc = await otpRef.get();
 
     // Rate limit check
-    if (existing && Date.now() - existing.lastSentAt < RESEND_LIMIT) {
-      return res.status(429).json({
-        error: "Please wait before requesting OTP again",
-      });
+    if (existingDoc.exists) {
+      const existingData = existingDoc.data();
+      if (Date.now() - existingData.lastSentAt < RESEND_LIMIT) {
+        return res.status(429).json({
+          error: "Please wait before requesting OTP again",
+        });
+      }
     }
 
     const otp = generateOTP();
     const hashedOtp = hashOTP(otp);
 
-    otpStore[email] = {
+    await otpRef.set({
       otpHash: hashedOtp,
       expiresAt: Date.now() + OTP_EXPIRY,
       attempts: 0,
       lastSentAt: Date.now(),
-    };
-
-    // Call GAS API
-    await axios.post(GAS_URL, {
-      email,
-      otp,
+      createdAt: new Date(),
     });
+
+    // Send OTP via GAS
+    await axios.post(GAS_URL, { email, otp });
 
     res.json({ message: "OTP Sent Successfully ✅" });
 
@@ -177,47 +183,174 @@ router.post("/send-otp", async (req, res) => {
 });
 
 /* =========================================================
-   🔎 VERIFY OTP
+   🔎 VERIFY OTP (Firestore Based)
 ========================================================= */
+// router.post("/verify-otp", async (req, res) => {
+//   try {
+//     const { email, otp } = req.body;
+
+//     if (!email || !otp) {
+//       return res.status(400).json({ error: "Email and OTP required" });
+//     }
+
+//     const otpRef = db.collection("otp").doc(email);
+//     const doc = await otpRef.get();
+
+//     if (!doc.exists) {
+//       return res.status(400).json({ error: "OTP not found" });
+//     }
+
+//     const data = doc.data();
+
+//     // Expiry check
+//     if (Date.now() > data.expiresAt) {
+//       await otpRef.delete();
+//       return res.status(400).json({ error: "OTP expired" });
+//     }
+
+//     // Attempt limit check
+//     if (data.attempts >= MAX_ATTEMPTS) {
+//       await otpRef.delete();
+//       return res.status(429).json({ error: "Too many attempts" });
+//     }
+
+//     const hashedInput = hashOTP(otp);
+
+//     if (hashedInput !== data.otpHash) {
+//       await otpRef.update({
+//         attempts: data.attempts + 1,
+//       });
+//       return res.status(400).json({ error: "Invalid OTP" });
+//     }
+
+//     // OTP verified → delete OTP
+//     await otpRef.delete();
+
+//     // Create or update user
+//     const userData = {
+//       uid: email,
+//       email,
+//       role: "student",
+//       createdAt: new Date(),
+//     };
+
+//     //Collection me data add karna
+//     // Create auth user
+//     await db.collection("users").doc(email).set(
+//       {
+//         uid: email,
+//         email,
+//         role: "student",
+//         createdAt: new Date(),
+//       },
+//       { merge: true },
+//     );
+
+//     // Create student profile separately
+//     await db.collection("students").doc(email).set(
+//       {
+//         uid: email,
+//         email,
+//         enrolledCourses: [],
+//         feesStatus: "pending",
+//         attendance: 0,
+//         createdAt: new Date(),
+//       },
+//       { merge: true },
+//     );
+
+//     //-----------------------------------------------------------
+
+//     // Generate JWT
+//     const token = generateToken({
+//       uid: email,
+//       email,
+//       role: "student",
+//     });
+
+//     res.json({
+//       success: true,
+//       token,
+//       user: userData,
+//     });
+//   } catch (error) {
+//     console.error("Verify OTP Error:", error);
+//     res.status(500).json({ error: "Internal Server Error" });
+//   }
+// });
+
+
+//---------------------------New ---------------------------
+
 router.post("/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email || !otp) {
-      return res.status(400).json({ error: "Email and OTP required" });
-    }
+    const otpRef = db.collection("otp").doc(email);
+    const doc = await otpRef.get();
 
-    const storedData = otpStore[email];
-
-    if (!storedData) {
+    if (!doc.exists) {
       return res.status(400).json({ error: "OTP not found" });
     }
 
-    // Expiry check
-    if (Date.now() > storedData.expiresAt) {
-      delete otpStore[email];
-      return res.status(400).json({ error: "OTP expired" });
-    }
+    const data = doc.data();
 
-    // Attempt limit check
-    if (storedData.attempts >= MAX_ATTEMPTS) {
-      delete otpStore[email];
-      return res.status(403).json({ error: "Too many attempts" });
+    if (Date.now() > data.expiresAt) {
+      await otpRef.delete();
+      return res.status(400).json({ error: "OTP expired" });
     }
 
     const hashedInput = hashOTP(otp);
 
-    if (hashedInput !== storedData.otpHash) {
-      storedData.attempts += 1;
+    if (hashedInput !== data.otpHash) {
       return res.status(400).json({ error: "Invalid OTP" });
     }
 
-    // Success → Remove OTP
-    delete otpStore[email];
+    await otpRef.delete();
+
+    // 🔥 CHECK USER FROM DATABASE
+    const userRef = db.collection("users").doc(email);
+    const userDoc = await userRef.get();
+
+    let userData;
+
+    if (!userDoc.exists) {
+      // First time login → create new user
+      userData = {
+        uid: email,
+        email,
+        role: "student", // default role
+        createdAt: new Date(),
+      };
+
+      await userRef.set(userData);
+
+      // Create student profile
+      await db.collection("students").doc(email).set({
+        uid: email,
+        email,
+        enrolledCourses: [],
+        feesStatus: "pending",
+        attendance: 0,
+        createdAt: new Date(),
+      });
+
+    } else {
+      // Existing user → fetch role from DB
+      userData = userDoc.data();
+    }
+
+    // 🔥 Generate token using DB role
+    const token = generateToken({
+      uid: userData.uid,
+      email: userData.email,
+      role: userData.role,
+    });
 
     res.json({
       success: true,
-      message: "OTP Verified Successfully ✅",
+      token,
+      user: userData,
     });
 
   } catch (error) {
@@ -225,5 +358,6 @@ router.post("/verify-otp", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 module.exports = router;

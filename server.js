@@ -5,6 +5,8 @@ const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const studentRoutes = require("./routes/studentRoutes");
 const courseRoutes = require("./routes/courseRoutes");
+const verifyToken = require("./middleware/authMiddleware");
+const allowRoles = require("./middleware/roleMiddleware");
 
 const app = express();
 
@@ -47,7 +49,59 @@ app.get("/test-firebase", async (req, res) => {
 });
 
 
+
+// // const verifyToken = require("./middleware/authMiddleware");
+// const allowRoles = require("./middleware/roleMiddleware");
+
+// app.get("/api/admin/dashboard", verifyToken,  allowRoles("admin"),  (req, res) => {
+//     res.json({
+//       message: "Welcome Admin Dashboard",
+//       user: req.user,
+//     });
+//   },
+// );
+
+
+//======================== Admin Route=========================
+app.get(
+  "/api/admin/dashboard",
+  verifyToken,
+  allowRoles("admin"),
+  (req, res) => {
+    res.json({ message: "Welcome Admin Dashboard 🔥" });
+  }
+);
+
+
+//==========================Test protected Route===============
+
+app.get("/api/protected", verifyToken, (req, res) => {
+  res.json({
+    message: "Protected route accessed successfully 🔐",
+    user: req.user,
+  });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Ye route Cron-job.org use karega
 app.get('/ping', (req, res) => {
   res.status(200).send("I am alive! 🚀");
+});
+
+
+
+app.use((req, res, next) => {
+  console.log("Requested URL:", req.originalUrl);
+  next();
 });
