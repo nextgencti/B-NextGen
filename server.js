@@ -17,6 +17,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/courses", courseRoutes);
 
+
 app.get("/", (req, res) => {
   res.send("🚀 NextGen Backend Running Successfully");
 });

@@ -447,4 +447,63 @@ router.post("/verify-otp", async (req, res) => {
   }
 });
 
+
+
+
+
+router.post("/login", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No token provided" });
+    }
+
+    const firebaseToken = authHeader.split(" ")[1];
+
+    // 🔥 Firebase verify
+    const decoded = await admin.auth().verifyIdToken(firebaseToken);
+
+    const firebaseUID = decoded.uid;
+    const email = decoded.email;
+
+    const userRef = db.collection("users").doc(firebaseUID);
+    const userDoc = await userRef.get();
+
+    let userData;
+
+    if (!userDoc.exists) {
+      userData = {
+        uid: firebaseUID,
+        email,
+        role: "student",
+        createdAt: new Date(),
+      };
+
+      await userRef.set(userData);
+    } else {
+      userData = userDoc.data();
+    }
+
+    const token = generateToken(userData);
+
+    res.json({
+      token,
+      user: userData,
+    });
+
+  } catch (error) {
+    console.error("Login Error:", error);
+    res.status(401).json({ error: "Invalid Firebase Token" });
+  }
+});
+
+
+
+
+
+
 module.exports = router;
+
+
+
