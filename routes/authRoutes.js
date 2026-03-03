@@ -282,11 +282,97 @@ router.post("/send-otp", async (req, res) => {
 
 //---------------------------New ---------------------------
 
+// router.post("/verify-otp", async (req, res) => {
+//   try {
+//     const { email, otp } = req.body;
+
+//     const otpRef = db.collection("otp").doc(email);
+//     const doc = await otpRef.get();
+
+//     if (!doc.exists) {
+//       return res.status(400).json({ error: "OTP not found" });
+//     }
+
+//     const data = doc.data();
+
+//     if (Date.now() > data.expiresAt) {
+//       await otpRef.delete();
+//       return res.status(400).json({ error: "OTP expired" });
+//     }
+
+//     const hashedInput = hashOTP(otp);
+
+//     if (hashedInput !== data.otpHash) {
+//       return res.status(400).json({ error: "Invalid OTP" });
+//     }
+
+//     await otpRef.delete();
+
+//     // 🔥 CHECK USER FROM DATABASE
+//     const userRef = db.collection("users").doc(email);
+//     const userDoc = await userRef.get();
+
+//     let userData;
+
+//     if (!userDoc.exists) {
+//       // First time login → create new user
+//       userData = {
+//         uid: email,
+//         email,
+//         role: "student", // default role
+//         createdAt: new Date(),
+//       };
+
+//       await userRef.set(userData);
+
+//       // Create student profile
+//       await db.collection("students").doc(email).set({
+//         uid: email,
+//         email,
+//         enrolledCourses: [],
+//         feesStatus: "pending",
+//         attendance: 0,
+//         createdAt: new Date(),
+//       });
+
+//     } else {
+//       // Existing user → fetch role from DB
+//       userData = userDoc.data();
+//     }
+
+//     // 🔥 Generate token using DB role
+//     const token = generateToken({
+//       uid: userData.uid,
+//       email: userData.email,
+//       role: userData.role,
+//     });
+
+//     res.json({
+//       success: true,
+//       token,
+//       user: userData,
+//     });
+
+//   } catch (error) {
+//     console.error("Verify OTP Error:", error);
+//     res.status(500).json({ error: "Internal Server Error" });
+//   }
+// });
+
+
+
 router.post("/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    const otpRef = db.collection("otp").doc(email);
+    // ✅ Input validation (CRASH prevent karega)
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Email and OTP required" });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+
+    const otpRef = db.collection("otp").doc(normalizedEmail);
     const doc = await otpRef.get();
 
     if (!doc.exists) {
@@ -295,12 +381,18 @@ router.post("/verify-otp", async (req, res) => {
 
     const data = doc.data();
 
-    if (Date.now() > data.expiresAt) {
+    if (!data.expiresAt || Date.now() > data.expiresAt) {
       await otpRef.delete();
       return res.status(400).json({ error: "OTP expired" });
     }
 
-    const hashedInput = hashOTP(otp);
+    // ✅ Make sure secret exists
+    if (!process.env.OTP_SECRET) {
+      console.error("OTP_SECRET missing in environment variables");
+      return res.status(500).json({ error: "Server configuration error" });
+    }
+
+    const hashedInput = hashOTP(String(otp));
 
     if (hashedInput !== data.otpHash) {
       return res.status(400).json({ error: "Invalid OTP" });
@@ -308,27 +400,25 @@ router.post("/verify-otp", async (req, res) => {
 
     await otpRef.delete();
 
-    // 🔥 CHECK USER FROM DATABASE
-    const userRef = db.collection("users").doc(email);
+    // 🔥 USER CHECK
+    const userRef = db.collection("users").doc(normalizedEmail);
     const userDoc = await userRef.get();
 
     let userData;
 
     if (!userDoc.exists) {
-      // First time login → create new user
       userData = {
-        uid: email,
-        email,
-        role: "student", // default role
+        uid: normalizedEmail,
+        email: normalizedEmail,
+        role: "student",
         createdAt: new Date(),
       };
 
       await userRef.set(userData);
 
-      // Create student profile
-      await db.collection("students").doc(email).set({
-        uid: email,
-        email,
+      await db.collection("students").doc(normalizedEmail).set({
+        uid: normalizedEmail,
+        email: normalizedEmail,
         enrolledCourses: [],
         feesStatus: "pending",
         attendance: 0,
@@ -336,11 +426,9 @@ router.post("/verify-otp", async (req, res) => {
       });
 
     } else {
-      // Existing user → fetch role from DB
       userData = userDoc.data();
     }
 
-    // 🔥 Generate token using DB role
     const token = generateToken({
       uid: userData.uid,
       email: userData.email,
@@ -358,6 +446,5 @@ router.post("/verify-otp", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-
 
 module.exports = router;
