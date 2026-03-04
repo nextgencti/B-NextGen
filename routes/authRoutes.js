@@ -107,15 +107,17 @@
 // module.exports = router;
 
 //==================================GAS API==========================================
+
+
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const db = require("../config/firebaseAdmin");
-
 
 const admin = require("../config/firebaseAdmin");
+
+const db = admin.firestore();
 
 const GAS_URL = process.env.GAS_URL;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -188,180 +190,6 @@ router.post("/send-otp", async (req, res) => {
 /* =========================================================
    🔎 VERIFY OTP (Firestore Based)
 ========================================================= */
-// router.post("/verify-otp", async (req, res) => {
-//   try {
-//     const { email, otp } = req.body;
-
-//     if (!email || !otp) {
-//       return res.status(400).json({ error: "Email and OTP required" });
-//     }
-
-//     const otpRef = db.collection("otp").doc(email);
-//     const doc = await otpRef.get();
-
-//     if (!doc.exists) {
-//       return res.status(400).json({ error: "OTP not found" });
-//     }
-
-//     const data = doc.data();
-
-//     // Expiry check
-//     if (Date.now() > data.expiresAt) {
-//       await otpRef.delete();
-//       return res.status(400).json({ error: "OTP expired" });
-//     }
-
-//     // Attempt limit check
-//     if (data.attempts >= MAX_ATTEMPTS) {
-//       await otpRef.delete();
-//       return res.status(429).json({ error: "Too many attempts" });
-//     }
-
-//     const hashedInput = hashOTP(otp);
-
-//     if (hashedInput !== data.otpHash) {
-//       await otpRef.update({
-//         attempts: data.attempts + 1,
-//       });
-//       return res.status(400).json({ error: "Invalid OTP" });
-//     }
-
-//     // OTP verified → delete OTP
-//     await otpRef.delete();
-
-//     // Create or update user
-//     const userData = {
-//       uid: email,
-//       email,
-//       role: "student",
-//       createdAt: new Date(),
-//     };
-
-//     //Collection me data add karna
-//     // Create auth user
-//     await db.collection("users").doc(email).set(
-//       {
-//         uid: email,
-//         email,
-//         role: "student",
-//         createdAt: new Date(),
-//       },
-//       { merge: true },
-//     );
-
-//     // Create student profile separately
-//     await db.collection("students").doc(email).set(
-//       {
-//         uid: email,
-//         email,
-//         enrolledCourses: [],
-//         feesStatus: "pending",
-//         attendance: 0,
-//         createdAt: new Date(),
-//       },
-//       { merge: true },
-//     );
-
-//     //-----------------------------------------------------------
-
-//     // Generate JWT
-//     const token = generateToken({
-//       uid: email,
-//       email,
-//       role: "student",
-//     });
-
-//     res.json({
-//       success: true,
-//       token,
-//       user: userData,
-//     });
-//   } catch (error) {
-//     console.error("Verify OTP Error:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   }
-// });
-
-
-//---------------------------New ---------------------------
-
-// router.post("/verify-otp", async (req, res) => {
-//   try {
-//     const { email, otp } = req.body;
-
-//     const otpRef = db.collection("otp").doc(email);
-//     const doc = await otpRef.get();
-
-//     if (!doc.exists) {
-//       return res.status(400).json({ error: "OTP not found" });
-//     }
-
-//     const data = doc.data();
-
-//     if (Date.now() > data.expiresAt) {
-//       await otpRef.delete();
-//       return res.status(400).json({ error: "OTP expired" });
-//     }
-
-//     const hashedInput = hashOTP(otp);
-
-//     if (hashedInput !== data.otpHash) {
-//       return res.status(400).json({ error: "Invalid OTP" });
-//     }
-
-//     await otpRef.delete();
-
-//     // 🔥 CHECK USER FROM DATABASE
-//     const userRef = db.collection("users").doc(email);
-//     const userDoc = await userRef.get();
-
-//     let userData;
-
-//     if (!userDoc.exists) {
-//       // First time login → create new user
-//       userData = {
-//         uid: email,
-//         email,
-//         role: "student", // default role
-//         createdAt: new Date(),
-//       };
-
-//       await userRef.set(userData);
-
-//       // Create student profile
-//       await db.collection("students").doc(email).set({
-//         uid: email,
-//         email,
-//         enrolledCourses: [],
-//         feesStatus: "pending",
-//         attendance: 0,
-//         createdAt: new Date(),
-//       });
-
-//     } else {
-//       // Existing user → fetch role from DB
-//       userData = userDoc.data();
-//     }
-
-//     // 🔥 Generate token using DB role
-//     const token = generateToken({
-//       uid: userData.uid,
-//       email: userData.email,
-//       role: userData.role,
-//     });
-
-//     res.json({
-//       success: true,
-//       token,
-//       user: userData,
-//     });
-
-//   } catch (error) {
-//     console.error("Verify OTP Error:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   }
-// });
-
 
 
 router.post("/verify-otp", async (req, res) => {
@@ -504,50 +332,33 @@ router.post("/login", async (req, res) => {
 
 //--------------------------------------Rigister-------------------------------------
 
+
 router.post("/register", async (req, res) => {
+
   try {
 
-    const token = req.headers.authorization?.split(" ")[1];
+    console.log("Request received");
 
-    if (!token) {
+    const authHeader = req.headers.authorization;
+
+    console.log("Header:", authHeader);
+
+    if (!authHeader) {
       return res.status(401).json({
-        success: false,
-        message: "Token missing"
+        message: "Authorization header missing"
       });
     }
 
-    // 🔐 Verify Firebase Token
+    const token = authHeader.split(" ")[1];
+
+    console.log("Token received");
+
     const decodedToken = await admin.auth().verifyIdToken(token);
 
-    const email = decodedToken.email;
-    const uid = decodedToken.uid;
-
-    const userRef = db.collection("users").doc(uid);
-    const userDoc = await userRef.get();
-
-    // 👤 Agar user already exist karta hai
-    if (userDoc.exists) {
-      return res.json({
-        success: true,
-        message: "User already exists",
-        data: userDoc.data()
-      });
-    }
-
-    // 👤 New User Create
-    const userData = {
-      uid: uid,
-      email: email,
-      role: "student",
-      createdAt: new Date()
-    };
-
-    await userRef.set(userData);
+    console.log("Token verified");
 
     res.json({
-      success: true,
-      message: "User registered successfully",
-      data: userData
+      message: "Success"
     });
 
   } catch (error) {
@@ -555,13 +366,22 @@ router.post("/register", async (req, res) => {
     console.error("Register Error:", error);
 
     res.status(500).json({
-      success: false,
-      message: "Registration failed"
+      message: error.message
     });
 
   }
+
 });
 
+// router.post("/register", (req, res) => {
+
+//   res.json({
+//     message: "Register API working"
+//   });
+
+// });
+
+module.exports = router;
 
 router.get("/test", (req, res) => {
   res.send("Auth route working");
