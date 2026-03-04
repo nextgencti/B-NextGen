@@ -1,5 +1,5 @@
 const express = require("express");
-const db = require("../config/firebase");
+const db = require("../config/firebaseAdmin");
 
 const router = express.Router();
 

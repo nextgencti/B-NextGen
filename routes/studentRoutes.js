@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const cloudinary = require("../config/cloudinary");
-const db = require("../config/firebase");
+const db = require("../config/firebaseAdmin");
 const verifyToken = require("../middleware/authMiddleware");
 
 const router = express.Router();

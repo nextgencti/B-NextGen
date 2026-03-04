@@ -112,7 +112,10 @@ const router = express.Router();
 const axios = require("axios");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const db = require("../config/firebase");
+const db = require("../config/firebaseAdmin");
+
+
+const admin = require("../config/firebaseAdmin");
 
 const GAS_URL = process.env.GAS_URL;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -565,8 +568,5 @@ router.get("/test", (req, res) => {
 });
 
 module.exports = router;
-
-
-
 
 
