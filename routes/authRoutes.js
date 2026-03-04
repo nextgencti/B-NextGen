@@ -448,7 +448,7 @@ router.post("/verify-otp", async (req, res) => {
 });
 
 
-
+//-----------------------------Login-------------------------------------
 
 
 router.post("/login", async (req, res) => {
@@ -499,11 +499,74 @@ router.post("/login", async (req, res) => {
 });
 
 
+//--------------------------------------Rigister-------------------------------------
+
+router.post("/register", async (req, res) => {
+  try {
+
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Token missing"
+      });
+    }
+
+    // 🔐 Verify Firebase Token
+    const decodedToken = await admin.auth().verifyIdToken(token);
+
+    const email = decodedToken.email;
+    const uid = decodedToken.uid;
+
+    const userRef = db.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+
+    // 👤 Agar user already exist karta hai
+    if (userDoc.exists) {
+      return res.json({
+        success: true,
+        message: "User already exists",
+        data: userDoc.data()
+      });
+    }
+
+    // 👤 New User Create
+    const userData = {
+      uid: uid,
+      email: email,
+      role: "student",
+      createdAt: new Date()
+    };
+
+    await userRef.set(userData);
+
+    res.json({
+      success: true,
+      message: "User registered successfully",
+      data: userData
+    });
+
+  } catch (error) {
+
+    console.error("Register Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Registration failed"
+    });
+
+  }
+});
 
 
-
+router.get("/test", (req, res) => {
+  res.send("Auth route working");
+});
 
 module.exports = router;
+
+
 
 
 
